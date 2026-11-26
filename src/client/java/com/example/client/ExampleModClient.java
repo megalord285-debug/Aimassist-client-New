@@ -1,21 +1,22 @@
 package com.example.client;
+
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
 import org.lwjgl.glfw.GLFW;
 
 public class ExampleModClient implements ClientModInitializer {
 
     static boolean enabled = false;
-    static KeyBinding toggleKey;
+    static KeyMapping toggleKey;
 
     static final double RANGE = 3.2;
     static final float SMOOTH = 0.6f;
@@ -23,47 +24,47 @@ public class ExampleModClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        toggleKey = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.aimassist.toggle",
-                InputUtil.Type.KEYSYM,
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_J,
-                KeyBinding.Category.create(Identifier.of("aimassist", "main"))));
+                KeyMapping.Category.register(Identifier.fromNamespaceAndPath("aimassist", "main"))));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (toggleKey.wasPressed()) {
+            while (toggleKey.consumeClick()) {
                 enabled = !enabled;
                 if (client.player != null) {
-                    client.player.sendMessage(
-                            Text.literal("AimAssist: " + (enabled ? "ON" : "OFF")), true);
+                    client.player.displayClientMessage(
+                            Component.literal("AimAssist: " + (enabled ? "ON" : "OFF")), true);
                 }
             }
 
-            if (!enabled || client.player == null || client.world == null
-                    || client.currentScreen != null) return;
+            if (!enabled || client.player == null || client.level == null
+                    || client.screen != null) return;
 
-            ClientPlayerEntity me = client.player;
+            LocalPlayer me = client.player;
 
-            PlayerEntity target = null;
+            Player target = null;
             double best = RANGE;
-            for (PlayerEntity p : client.world.getPlayers()) {
+            for (Player p : client.level.players()) {
                 if (p == me || !p.isAlive() || p.isSpectator()) continue;
                 double dist = me.distanceTo(p);
                 if (dist <= best) { best = dist; target = p; }
             }
             if (target == null) return;
 
-            Vec3d aim = target.getBoundingBox().getCenter();
-            Vec3d d = aim.subtract(me.getEyePos());
+            Vec3 aim = target.getBoundingBox().getCenter();
+            Vec3 d = aim.subtract(me.getEyePosition());
 
             float tYaw = (float) (Math.toDegrees(Math.atan2(d.z, d.x)) - 90.0);
             float tPitch = (float) -Math.toDegrees(Math.atan2(d.y, Math.hypot(d.x, d.z)));
 
-            float dYaw = MathHelper.wrapDegrees(tYaw - me.getYaw());
-            float dPitch = tPitch - me.getPitch();
+            float dYaw = Mth.wrapDegrees(tYaw - me.getYRot());
+            float dPitch = tPitch - me.getXRot();
 
-            me.setYaw(me.getYaw() + MathHelper.clamp(dYaw * SMOOTH, -MAX_STEP, MAX_STEP));
-            me.setPitch(MathHelper.clamp(
-                    me.getPitch() + MathHelper.clamp(dPitch * SMOOTH, -MAX_STEP, MAX_STEP),
+            me.setYRot(me.getYRot() + Mth.clamp(dYaw * SMOOTH, -MAX_STEP, MAX_STEP));
+            me.setXRot(Mth.clamp(
+                    me.getXRot() + Mth.clamp(dPitch * SMOOTH, -MAX_STEP, MAX_STEP),
                     -90f, 90f));
         });
     }
